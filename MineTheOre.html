@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MineTheOre</title>
+    <style>
+        h1 { color: #ffffff; margin-bottom: 5px; }
+        body {
+            background-color: hsl(148, 20%, 10%);
+            color: #aaaaaa;
+            padding: 27px;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+            text-align: center;
+        }
+        #game-container { display: inline-block; position: relative; }
+        canvas { border: 4px solid #333; cursor: pointer; background-color: #000; }
+        .stats { margin-bottom: 15px; font-size: 18px; color: #00ff88; }
+    </style>
+</head>
+<body>
+
+    <h1>MineTheOre</h1>
+    <div class="stats">Level: <span id="level-num">1</span></div>
+    
+    <div id="game-container">
+        <canvas id="GameCanvas" width="500" height="500"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("GameCanvas");
+        const ctx = canvas.getContext("2d");
+        const levelDisplay = document.getElementById("level-num");
+
+        var level = 1;
+        var gameRunning = true;
+        var canClick = true;
+
+        const goodPics = [
+            "DiamondBlock.jpg", "DiamondBlock2.jpg", "DiamondItemFrame.jpg",
+            "DeepslateEmeraldBlock.jpg", "DeepslateDiamondBlock.jpg", "DeepslateDiamondBlock2.jpg"            
+        ];
+        const badPics = [
+            "Creeper2.jpg", "Creeper3.jpg", "Creeper4.jpg", "Creeper5.jpg", "CreeperWalking.jpg"
+        ];
+        const blowUps = [
+            "CreeperExplosion.jpg", "CreeperExplosion2.jpg", "CreeperExplosion3.jpg"
+        ];
+        
+        const luckyImg = new Image();
+        luckyImg.src = 'LuckyBlock.jpg';
+        luckyImg.onload = drawBoard;
+
+        function drawBoard() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(luckyImg, 0, 0, 248, 248);
+            ctx.drawImage(luckyImg, 252, 0, 248, 248);
+            ctx.drawImage(luckyImg, 0, 252, 248, 248);
+            ctx.drawImage(luckyImg, 252, 252, 248, 248);
+            canClick = true;
+        }
+
+        canvas.addEventListener("click", function() {
+            if (!gameRunning || !canClick) return;
+            canClick = false; 
+            handleRoll();
+        });
+
+        function handleRoll() {
+            let winChance;
+            if (level === 1) winChance = 0.9;
+            else if (level === 2) winChance = 0.8;
+            else if (level === 3) winChance = 0.75;
+            else if (level === 4) winChance = 0.7;
+            else if (level === 5) winChance = 0.67;
+            else if (level >= 67) {
+                alert("LUCKY DUCK! YOU WON!");
+                return;
+            } else {
+                winChance = (70 - level) / 100;
+            }
+
+            if (Math.random() <= winChance) {
+                showSurvival();
+            } else {
+                showExplosion();
+            }
+        }
+
+        function showSurvival() {
+            const img = new Image();
+            img.src = goodPics[Math.floor(Math.random() * goodPics.length)];
+            img.onload = () => {
+                ctx.drawImage(img, 0, 0, 500, 500);
+                setTimeout(() => {
+                    alert("Safe! Level Up.");
+                    level++;
+                    levelDisplay.innerText = level;
+                    drawBoard();
+                }, 500);
+            };
+        }
+
+        function showExplosion() {
+            const creeperImg = new Image();
+            const boomImg = new Image();
+            
+            // Pick the images
+            creeperImg.src = badPics[Math.floor(Math.random() * badPics.length)];
+            boomImg.src = blowUps[Math.floor(Math.random() * blowUps.length)];
+
+            // Step 1: Show Creeper
+            creeperImg.onload = () => {
+                ctx.drawImage(creeperImg, 0, 0, 500, 500);
+                
+                // Step 2: After 400ms, show Explosion
+                setTimeout(() => {
+                    ctx.drawImage(boomImg, 0, 0, 500, 500);
+                    
+                    // Step 3: After showing explosion, reset game
+                    setTimeout(() => {
+                        alert("BOOM! You died at level " + level);
+                        level = 1;
+                        levelDisplay.innerText = level;
+                        drawBoard();
+                    }, 500);
+                }, 400); // This controls how long the creeper is visible
+            };
+        }
+    </script>
+</body>
+</html>
