@@ -106,17 +106,27 @@
         
         const luckyImg = new Image();
         luckyImg.src = 'LuckyBlock.jpg';
-        luckyImg.onload = () => { drawBoard(); loadLeaderboard(); };
+        
+        // FIX: Start game immediately once the block image loads
+        luckyImg.onload = () => { 
+            drawBoard(); 
+            // Load leaderboard separately so it doesn't block the game
+            loadLeaderboard().catch(err => console.log("LB failed to load on start"));
+        };
 
         // ==========================================
-        // 3. DATABASE LOGIC (WITH DEBUG LOGS)
+        // 3. DATABASE LOGIC
         // ==========================================
         
         async function loadLeaderboard() {
+            const list = document.getElementById("score-list");
             try {
+                // Check if branch is main or master - common source of 404s
                 const res = await fetch(`https://raw.githubusercontent.com/${GITHUB_USER}/${REPO_NAME}/main/${FILE_PATH}?t=${Date.now()}`);
+                
+                if (!res.ok) throw new Error("File not found on GitHub");
+
                 const data = await res.json();
-                const list = document.getElementById("score-list");
                 
                 if (!data.scores || data.scores.length === 0) {
                     list.innerText = "No scores yet!";
@@ -128,36 +138,31 @@
                     .join('');
                 return data.scores;
             } catch (e) {
-                console.log("Leaderboard Load Error:", e);
-                document.getElementById("score-list").innerText = "Offline";
+                console.error("Leaderboard Load Error:", e);
+                list.innerText = "Leaderboard Offline";
                 return [];
             }
         }
 
         async function saveScore(playerName, finalLevel) {
-            console.log("DEBUG: Starting saveScore function...");
-            document.getElementById("score-list").innerText = "Saving to GitHub...";
+            console.log("DEBUG: Starting saveScore...");
+            const list = document.getElementById("score-list");
+            list.innerText = "Saving to GitHub...";
             
             try {
-                // Step A: Get current file data
-                console.log("DEBUG: Fetching current SHA from GitHub...");
                 const res = await fetch(API_URL, { 
                     headers: { "Authorization": `token ${AUTH}` } 
                 });
                 
-                if (!res.ok) throw new Error("Step A Failed: " + res.status);
+                if (!res.ok) throw new Error("Could not reach GitHub API");
                 
                 const data = await res.json();
                 const content = JSON.parse(atob(data.content));
-                console.log("DEBUG: Current file received. Adding new score...");
 
-                // Step B: Update scores
                 content.scores.push({ name: playerName, score: finalLevel });
                 content.scores.sort((a, b) => b.score - a.score);
                 const topTen = content.scores.slice(0, 10);
 
-                // Step C: Push back to GitHub
-                console.log("DEBUG: Sending PUT request to GitHub...");
                 const updateRes = await fetch(API_URL, {
                     method: "PUT",
                     headers: { 
@@ -172,16 +177,15 @@
                 });
 
                 if (updateRes.ok) {
-                    console.log("DEBUG: Success! File updated.");
-                    setTimeout(loadLeaderboard, 2000); // Reload after 2 seconds
+                    console.log("DEBUG: Success!");
+                    loadLeaderboard();
                 } else {
-                    const errText = await updateRes.text();
-                    throw new Error("Step C Failed: " + updateRes.status + " - " + errText);
+                    throw new Error("Update failed");
                 }
 
             } catch (err) { 
                 console.error("CRITICAL ERROR:", err);
-                document.getElementById("score-list").innerText = "Save Failed! Check Console.";
+                list.innerText = "Save Failed!";
             }
         }
 
@@ -190,10 +194,13 @@
         // ==========================================
         function drawBoard() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(luckyImg, 0, 0, 248, 248);
-            ctx.drawImage(luckyImg, 252, 0, 248, 248);
-            ctx.drawImage(luckyImg, 0, 252, 248, 248);
-            ctx.drawImage(luckyImg, 252, 252, 248, 248);
+            // Verify image exists before drawing to prevent crashes
+            if(luckyImg.complete) {
+                ctx.drawImage(luckyImg, 0, 0, 248, 248);
+                ctx.drawImage(luckyImg, 252, 0, 248, 248);
+                ctx.drawImage(luckyImg, 0, 252, 248, 248);
+                ctx.drawImage(luckyImg, 252, 252, 248, 248);
+            }
             canClick = true;
         }
 
@@ -218,6 +225,7 @@
                 ctx.drawImage(img, 0, 0, 500, 500);
                 setTimeout(() => { level++; levelDisplay.innerText = level; drawBoard(); }, 500);
             };
+            img.onerror = () => { drawBoard(); level++; levelDisplay.innerText = level; };
         }
 
         function showExplosion() {
@@ -237,8 +245,6 @@
 
         async function handleGameOver(didWin) {
             const finalScore = level;
-            
-            // Forces the game to ask for a name regardless of score for testing
             highscoreBanner.style.display = "block";
             
             setTimeout(() => {
@@ -256,4 +262,3 @@
     </script>
 </body>
 </html>
-
