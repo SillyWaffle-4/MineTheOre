@@ -12,12 +12,9 @@
             font-size: 14px;
             font-family: 'Courier New', monospace;
             text-align: center;
-            overflow-x: hidden;
         }
-        #game-container { display: inline-block; position: relative; }
-        canvas { border: 4px solid #333; cursor: pointer; background-color: #000; }
+        canvas { border: 4px solid #333; cursor: pointer; background-color: #000; display: inline-block; }
         .stats { margin-bottom: 15px; font-size: 18px; color: #00ff88; }
-        
         #leaderboard {
             margin-top: 30px;
             padding: 20px;
@@ -26,60 +23,36 @@
             min-width: 300px;
             background: rgba(0,0,0,0.3);
         }
-        .score-entry {
-            display: flex;
-            justify-content: space-between;
-            padding: 8px 15px;
-            border-bottom: 1px solid #222;
-        }
-        .score-entry:nth-child(even) { background: rgba(255,255,255,0.05); }
+        .score-entry { display: flex; justify-content: space-between; padding: 8px 15px; border-bottom: 1px solid #222; }
         .name { color: #fff; font-weight: bold; }
         .score { color: #00ff88; }
-        h3 { color: #00ff88; text-transform: uppercase; letter-spacing: 2px; margin-top: 0; }
-
+        h3 { color: #00ff88; text-transform: uppercase; letter-spacing: 2px; }
         #highscore-anim {
             display: none;
             position: fixed;
-            top: 50%;
-            left: 50%;
+            top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(255, 215, 0, 0.9);
-            color: #000;
-            padding: 40px;
-            border-radius: 20px;
-            font-size: 30px;
-            font-weight: bold;
-            z-index: 100;
-            box-shadow: 0 0 50px gold;
-            animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-        @keyframes popIn {
-            0% { transform: translate(-50%, -50%) scale(0); }
-            100% { transform: translate(-50%, -50%) scale(1); }
+            background: gold; color: #000;
+            padding: 40px; border-radius: 20px;
+            font-size: 30px; font-weight: bold; z-index: 100;
         }
     </style>
 </head>
 <body>
 
     <div id="highscore-anim">🏆 NEW TOP 10! 🏆</div>
-
     <h1>MineTheOre</h1>
     <div class="stats">Level: <span id="level-num">1</span></div>
     
-    <div id="game-container">
-        <canvas id="GameCanvas" width="500" height="500"></canvas>
-    </div>
+    <canvas id="GameCanvas" width="500" height="500"></canvas>
 
     <br>
     <div id="leaderboard">
         <h3>--- TOP 10 MINERS ---</h3>
-        <div id="score-list">Loading...</div>
+        <div id="score-list">Checking connection...</div>
     </div>
 
     <script>
-        // ==========================================
-        // 1. CONFIG
-        // ==========================================
         const GITHUB_USER = "SillyWaffle-4";
         const REPO_NAME = "MineTheOre";
         const SCRAMBLED_KEY = "Z2hwX2g3NWkydG8xcFdpcmlhbXQzZUlsaUNzaUN2bDZBWjJDV1N5aA=="; 
@@ -88,74 +61,56 @@
         const AUTH = atob(SCRAMBLED_KEY); 
         const API_URL = `https://api.github.com/repos/${GITHUB_USER}/${REPO_NAME}/contents/${FILE_PATH}`;
 
-        // ==========================================
-        // 2. GAME SETUP
-        // ==========================================
         const canvas = document.getElementById("GameCanvas");
         const ctx = canvas.getContext("2d");
         const levelDisplay = document.getElementById("level-num");
         const highscoreBanner = document.getElementById("highscore-anim");
 
-        var level = 1;
-        var gameRunning = true;
-        var canClick = true;
+        let level = 1;
+        let canClick = true;
 
-        const goodPics = ["DiamondBlock.jpg", "DiamondBlock2.jpg", "DiamondItemFrame.jpg", "DeepslateEmeraldBlock.jpg", "DeepslateDiamondBlock.jpg", "DeepslateDiamondBlock2.jpg"];
-        const badPics = ["Creeper2.jpg", "Creeper3.jpg", "Creeper4.jpg", "Creeper5.jpg", "CreeperWalking.jpg"];
-        const blowUps = ["CreeperExplosion.jpg", "CreeperExplosion2.jpg", "CreeperExplosion3.jpg"];
-        
         const luckyImg = new Image();
         luckyImg.src = 'LuckyBlock.jpg';
         
-        // FIX: Start game immediately once the block image loads
-        luckyImg.onload = () => { 
-            drawBoard(); 
-            // Load leaderboard separately so it doesn't block the game
-            loadLeaderboard().catch(err => console.log("LB failed to load on start"));
-        };
+        // GAME START LOGIC
+        luckyImg.onload = () => { drawBoard(); }; 
+        // Force draw anyway after 1 second in case onload fails
+        setTimeout(drawBoard, 1000); 
 
-        // ==========================================
-        // 3. DATABASE LOGIC
-        // ==========================================
-        
+        loadLeaderboard();
+
         async function loadLeaderboard() {
             const list = document.getElementById("score-list");
+            
+            // Timeout Controller: Give up after 5 seconds
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
+
             try {
-                // Check if branch is main or master - common source of 404s
-                const res = await fetch(`https://raw.githubusercontent.com/${GITHUB_USER}/${REPO_NAME}/main/${FILE_PATH}?t=${Date.now()}`);
-                
-                if (!res.ok) throw new Error("File not found on GitHub");
+                const res = await fetch(`https://raw.githubusercontent.com/${GITHUB_USER}/${REPO_NAME}/main/${FILE_PATH}?t=${Date.now()}`, { signal: controller.signal });
+                clearTimeout(timeoutId);
+
+                if (!res.ok) throw new Error("404");
 
                 const data = await res.json();
-                
                 if (!data.scores || data.scores.length === 0) {
                     list.innerText = "No scores yet!";
-                    return [];
+                } else {
+                    list.innerHTML = data.scores
+                        .map((s, i) => `<div class="score-entry"><span class="name">${i+1}. ${s.name}</span><span class="score">Lvl ${s.score}</span></div>`)
+                        .join('');
                 }
-
-                list.innerHTML = data.scores
-                    .map((s, i) => `<div class="score-entry"><span class="name">${i+1}. ${s.name}</span><span class="score">Lvl ${s.score}</span></div>`)
-                    .join('');
-                return data.scores;
             } catch (e) {
-                console.error("Leaderboard Load Error:", e);
                 list.innerText = "Leaderboard Offline";
-                return [];
+                console.log("Load failed, playing in offline mode.");
             }
         }
 
         async function saveScore(playerName, finalLevel) {
-            console.log("DEBUG: Starting saveScore...");
             const list = document.getElementById("score-list");
-            list.innerText = "Saving to GitHub...";
-            
+            list.innerText = "Syncing...";
             try {
-                const res = await fetch(API_URL, { 
-                    headers: { "Authorization": `token ${AUTH}` } 
-                });
-                
-                if (!res.ok) throw new Error("Could not reach GitHub API");
-                
+                const res = await fetch(API_URL, { headers: { "Authorization": `token ${AUTH}` } });
                 const data = await res.json();
                 const content = JSON.parse(atob(data.content));
 
@@ -163,39 +118,25 @@
                 content.scores.sort((a, b) => b.score - a.score);
                 const topTen = content.scores.slice(0, 10);
 
-                const updateRes = await fetch(API_URL, {
+                await fetch(API_URL, {
                     method: "PUT",
-                    headers: { 
-                        "Authorization": `token ${AUTH}`, 
-                        "Content-Type": "application/json" 
-                    },
+                    headers: { "Authorization": `token ${AUTH}`, "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        message: `Score: ${playerName} Lvl ${finalLevel}`,
+                        message: `Score: ${playerName}`,
                         content: btoa(JSON.stringify({ scores: topTen }, null, 2)),
                         sha: data.sha
                     })
                 });
-
-                if (updateRes.ok) {
-                    console.log("DEBUG: Success!");
-                    loadLeaderboard();
-                } else {
-                    throw new Error("Update failed");
-                }
-
-            } catch (err) { 
-                console.error("CRITICAL ERROR:", err);
-                list.innerText = "Save Failed!";
+                loadLeaderboard();
+            } catch (err) {
+                list.innerText = "Sync Error";
             }
         }
 
-        // ==========================================
-        // 4. GAME ENGINE
-        // ==========================================
         function drawBoard() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            // Verify image exists before drawing to prevent crashes
-            if(luckyImg.complete) {
+            ctx.fillStyle = "#000";
+            ctx.fillRect(0, 0, 500, 500);
+            if (luckyImg.complete) {
                 ctx.drawImage(luckyImg, 0, 0, 248, 248);
                 ctx.drawImage(luckyImg, 252, 0, 248, 248);
                 ctx.drawImage(luckyImg, 0, 252, 248, 248);
@@ -205,59 +146,31 @@
         }
 
         canvas.addEventListener("click", () => {
-            if (!gameRunning || !canClick) return;
+            if (!canClick) return;
             canClick = false; 
-            handleRoll();
+            
+            // Logic for rolling
+            let winChance = level === 1 ? 0.9 : (70 - level) / 100;
+            if (Math.random() <= winChance) {
+                level++;
+                levelDisplay.innerText = level;
+                drawBoard();
+            } else {
+                handleGameOver();
+            }
         });
 
-        function handleRoll() {
-            let winChance = level === 1 ? 0.9 : level === 2 ? 0.8 : (70 - level) / 100;
-            if (level >= 67) { handleGameOver(true); return; }
-
-            if (Math.random() <= winChance) { showSurvival(); } 
-            else { showExplosion(); }
-        }
-
-        function showSurvival() {
-            const img = new Image();
-            img.src = goodPics[Math.floor(Math.random() * goodPics.length)];
-            img.onload = () => {
-                ctx.drawImage(img, 0, 0, 500, 500);
-                setTimeout(() => { level++; levelDisplay.innerText = level; drawBoard(); }, 500);
-            };
-            img.onerror = () => { drawBoard(); level++; levelDisplay.innerText = level; };
-        }
-
-        function showExplosion() {
-            const creeperImg = new Image();
-            const boomImg = new Image();
-            creeperImg.src = badPics[Math.floor(Math.random() * badPics.length)];
-            boomImg.src = blowUps[Math.floor(Math.random() * blowUps.length)];
-
-            creeperImg.onload = () => {
-                ctx.drawImage(creeperImg, 0, 0, 500, 500);
-                setTimeout(() => {
-                    ctx.drawImage(boomImg, 0, 0, 500, 500);
-                    setTimeout(() => { handleGameOver(false); }, 500);
-                }, 400);
-            };
-        }
-
-        async function handleGameOver(didWin) {
+        function handleGameOver() {
             const finalScore = level;
             highscoreBanner.style.display = "block";
-            
             setTimeout(() => {
                 highscoreBanner.style.display = "none";
-                const name = prompt("SAVE SCORE? Enter your name:");
-                if (name && name.trim().length > 0) {
-                    saveScore(name.substring(0, 12), finalScore);
-                }
+                const name = prompt("Enter name for Top 10:");
+                if (name) saveScore(name.substring(0, 12), finalScore);
+                level = 1;
+                levelDisplay.innerText = level;
+                drawBoard();
             }, 1000);
-
-            level = 1;
-            levelDisplay.innerText = level;
-            drawBoard();
         }
     </script>
 </body>
