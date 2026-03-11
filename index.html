@@ -13,7 +13,6 @@
             text-align: center;
         }
         canvas { border: 4px solid #333; cursor: pointer; background-color: #000; }
-        .stats { margin-bottom: 15px; font-size: 18px; color: #00ff88; }
         #leaderboard {
             margin-top: 20px;
             padding: 15px;
@@ -23,41 +22,29 @@
             background: rgba(0,0,0,0.5);
         }
         .score-row { display: flex; justify-content: space-between; padding: 5px 10px; border-bottom: 1px solid #222; }
-        .name { color: #fff; font-weight: bold; }
+        .name { color: #fff; }
         .val { color: #00ff88; }
-        #highscore-anim {
-            display: none;
-            position: fixed;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            background: #ffd700; color: #000;
-            padding: 30px; border-radius: 15px;
-            font-size: 24px; font-weight: bold; z-index: 1000;
-            box-shadow: 0 0 30px gold;
-        }
     </style>
 </head>
 <body>
 
-    <div id="highscore-anim">🏆 TOP 10 MINER! 🏆</div>
     <h1>MineTheOre</h1>
-    <div class="stats">Level: <span id="level-num">1</span></div>
+    <div style="margin-bottom:10px; color:#00ff88;">Level: <span id="level-num">1</span></div>
     
     <canvas id="GameCanvas" width="500" height="500"></canvas>
 
     <br>
     <div id="leaderboard">
         <h3 style="color:#00ff88; margin-top:0;">--- TOP 10 MINERS ---</h3>
-        <div id="score-list">Connecting to GitHub...</div>
+        <div id="score-list">Checking GitHub...</div>
     </div>
 
     <script>
-        // CONFIG - DOUBLE CHECK THESE
+        // 1. CONFIG - MAKE SURE THESE MATCH YOUR GITHUB EXACTLY
         const GITHUB_USER = "SillyWaffle-4";
         const REPO_NAME = "MineTheOre";
         const FILE_PATH = "leaderboard.json";
-        
-        // YOUR ENCODED KEY (The ghp_ one you scrambled)
+        // The Base64 string of your ghp_ token
         const SCRAMBLED_KEY = "Z2hwX2g3NWkydG8xcFdpcmlhbXQzZUlsaUNzaUN2bDZBWjJDV1N5aA=="; 
         
         const AUTH = atob(SCRAMBLED_KEY);
@@ -65,132 +52,105 @@
 
         const canvas = document.getElementById("GameCanvas");
         const ctx = canvas.getContext("2d");
-        const levelDisplay = document.getElementById("level-num");
-        const highscoreBanner = document.getElementById("highscore-anim");
+        const luckyImg = new Image();
+        luckyImg.src = 'LuckyBlock.jpg';
 
         let level = 1;
         let canClick = true;
 
-        const luckyImg = new Image();
-        luckyImg.src = 'LuckyBlock.jpg';
-        
-        // DRAW IMMEDIATELY
-        luckyImg.onload = drawBoard;
-        setTimeout(drawBoard, 500); // Fallback if image fails
-
-        // Start loading scores
-        loadLeaderboard();
-
-        async function loadLeaderboard() {
-            const list = document.getElementById("score-list");
-            try {
-                // Try 'main' branch first
-                const res = await fetch(`https://raw.githubusercontent.com/${GITHUB_USER}/${REPO_NAME}/main/${FILE_PATH}?nocache=${Date.now()}`);
-                
-                if (!res.ok) throw new Error("File Missing");
-
-                const data = await res.json();
-                if (!data.scores || data.scores.length === 0) {
-                    list.innerText = "No scores yet. Be the first!";
-                } else {
-                    list.innerHTML = data.scores
-                        .map((s, i) => `<div class="score-row"><span class="name">${i+1}. ${s.name}</span><span class="val">Lvl ${s.score}</span></div>`)
-                        .join('');
-                }
-            } catch (e) {
-                list.innerText = "Leaderboard Offline (Check Repo/File)";
-                console.warn("Leaderboard failed to load.");
-            }
-        }
-
-        async function saveScore(playerName, finalLevel) {
-            const list = document.getElementById("score-list");
-            list.innerText = "Saving Score...";
-            
-            try {
-                const getRes = await fetch(API_URL, { 
-                    headers: { "Authorization": `token ${AUTH}` } 
-                });
-                
-                if (!getRes.ok) throw new Error("Auth Failed");
-                
-                const fileData = await getRes.json();
-                const content = JSON.parse(atob(fileData.content));
-
-                content.scores.push({ name: playerName, score: finalLevel });
-                content.scores.sort((a, b) => b.score - a.score);
-                const topTen = content.scores.slice(0, 10);
-
-                const putRes = await fetch(API_URL, {
-                    method: "PUT",
-                    headers: { 
-                        "Authorization": `token ${AUTH}`,
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({
-                        message: `New score by ${playerName}`,
-                        content: btoa(JSON.stringify({ scores: topTen }, null, 2)),
-                        sha: fileData.sha
-                    })
-                });
-
-                if (putRes.ok) {
-                    loadLeaderboard();
-                } else {
-                    list.innerText = "Save Failed (GitHub Error)";
-                }
-            } catch (err) {
-                console.error(err);
-                list.innerText = "Save Failed (Auth/CORS)";
-            }
-        }
-
+        // 2. IMMEDIATE START (Fixes the black screen)
         function drawBoard() {
             ctx.fillStyle = "#111";
             ctx.fillRect(0, 0, 500, 500);
-            if (luckyImg.complete && luckyImg.naturalWidth !== 0) {
+            if (luckyImg.complete) {
                 ctx.drawImage(luckyImg, 0, 0, 248, 248);
                 ctx.drawImage(luckyImg, 252, 0, 248, 248);
                 ctx.drawImage(luckyImg, 0, 252, 248, 248);
                 ctx.drawImage(luckyImg, 252, 252, 248, 248);
-            } else {
-                ctx.fillStyle = "yellow";
-                ctx.font = "40px Courier";
-                ctx.fillText("?", 110, 140); ctx.fillText("?", 360, 140);
-                ctx.fillText("?", 110, 390); ctx.fillText("?", 360, 390);
             }
             canClick = true;
         }
+        
+        luckyImg.onload = drawBoard;
+        setTimeout(drawBoard, 500); // Draw even if image fails
 
+        // 3. ROBUST LOADER
+        async function loadLeaderboard() {
+            const list = document.getElementById("score-list");
+            try {
+                // We use a timestamp to bypass GitHub's cache
+                const response = await fetch(`https://api.github.com/repos/${GITHUB_USER}/${REPO_NAME}/contents/${FILE_PATH}?t=${Date.now()}`, {
+                    headers: { "Authorization": `token ${AUTH}` }
+                });
+
+                if (!response.ok) throw new Error("File not found");
+
+                const fileData = await response.json();
+                const content = JSON.parse(atob(fileData.content));
+
+                if (!content.scores || content.scores.length === 0) {
+                    list.innerText = "No scores yet!";
+                } else {
+                    list.innerHTML = content.scores
+                        .map((s, i) => `<div class="score-row"><span>${i+1}. ${s.name}</span><span class="val">Lvl ${s.score}</span></div>`)
+                        .join('');
+                }
+            } catch (e) {
+                console.error(e);
+                list.innerText = "Leaderboard Offline";
+            }
+        }
+
+        loadLeaderboard();
+
+        // 4. GAME INTERACTION
         canvas.addEventListener("click", () => {
             if (!canClick) return;
-            canClick = false; 
-
-            // Game Logic
-            let winChance = level === 1 ? 0.9 : (70 - level) / 100;
-            if (Math.random() <= winChance) {
+            canClick = false;
+            
+            // Simple logic: 80% chance to pass Level 1, getting harder
+            let chance = level === 1 ? 0.8 : (70 - level) / 100;
+            if (Math.random() <= chance) {
                 level++;
-                levelDisplay.innerText = level;
-                // Visual feedback of a click
-                ctx.fillStyle = "rgba(255,255,255,0.2)";
-                ctx.fillRect(0,0,500,500);
-                setTimeout(drawBoard, 100);
+                document.getElementById("level-num").innerText = level;
+                drawBoard();
             } else {
-                gameOver();
+                const name = prompt("BOOM! Game Over. Level: " + level + "\nEnter name for leaderboard:");
+                if (name) saveScore(name, level);
+                level = 1;
+                document.getElementById("level-num").innerText = level;
+                drawBoard();
             }
         });
 
-        function gameOver() {
-            const final = level;
-            highscoreBanner.style.display = "block";
-            setTimeout(() => {
-                highscoreBanner.style.display = "none";
-                const name = prompt("BOOM! You reached Level " + final + ".\nEnter your name:");
-                if (name) saveScore(name.substring(0, 12), final);
-                level = 1;
-                levelDisplay.innerText = level;
-                drawBoard();
-            }, 800);
+        async function saveScore(name, score) {
+            const list = document.getElementById("score-list");
+            list.innerText = "Syncing...";
+            try {
+                // Get the current file (and its SHA)
+                const res = await fetch(API_URL, { headers: { "Authorization": `token ${AUTH}` } });
+                const fileData = await res.json();
+                const current = JSON.parse(atob(fileData.content));
+
+                // Add new score
+                current.scores.push({ name: name.substring(0,10), score: score });
+                current.scores.sort((a, b) => b.score - a.score);
+                const top10 = current.scores.slice(0, 10);
+
+                // Upload back
+                await fetch(API_URL, {
+                    method: "PUT",
+                    headers: { "Authorization": `token ${AUTH}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        message: "Update Leaderboard",
+                        content: btoa(JSON.stringify({ scores: top10 }, null, 2)),
+                        sha: fileData.sha
+                    })
+                });
+                loadLeaderboard();
+            } catch (e) {
+                list.innerText = "Sync Error";
+            }
         }
     </script>
 </body>
